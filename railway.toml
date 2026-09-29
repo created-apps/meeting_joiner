@@ -1,0 +1,26 @@
+# MOM Service B deployment: HTTP-only join/leave worker.
+# Deploy cron-service/ separately using cron-service/railway.toml.
+#
+# Required worker variables:
+#   PORT                       = 3000
+#   MAX_CONCURRENT_MEETINGS    = 1  # raise for simultaneous meetings
+#   BOT_PROFILE_FORCE_SEED     = true
+#   BOT_PROFILE_URL            = <private URL containing bot-profile.b64>
+#   DOCKER_PLATFORM            = linux/amd64
+#
+# Optional:
+#   MAX_QUEUED_MEETINGS        = 10
+#   PARTICIPANTS_REFRESH_TIME  = 5000
+#   DISPLAY_BASE               = 101
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+dockerPlatform = "linux/amd64"
+
+[deploy]
+numReplicas = 1
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+healthcheckPath = "/health"
+healthcheckTimeout = 300

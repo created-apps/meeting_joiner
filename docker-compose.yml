@@ -1,0 +1,39 @@
+services:
+  mom-service-b:
+    build:
+      context: .
+      platforms:
+        - ${DOCKER_PLATFORM:-linux/amd64}
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
+    image: mom-service-b:latest
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      PORT: "3000"
+      MAX_CONCURRENT_MEETINGS: ${MAX_CONCURRENT_MEETINGS:-1}
+      MAX_QUEUED_MEETINGS: ${MAX_QUEUED_MEETINGS:-10}
+      PARTICIPANTS_REFRESH_TIME: ${PARTICIPANTS_REFRESH_TIME:-5000}
+      BOT_PROFILE_FORCE_SEED: ${BOT_PROFILE_FORCE_SEED:-true}
+      BOT_PROFILE_URL: ${BOT_PROFILE_URL:-}
+    volumes:
+      - bot-profile:/app/bot-profile-basic
+    restart: unless-stopped
+
+  calendar-cron:
+    build:
+      context: ./cron-service
+    image: mom-calendar-cron:latest
+    environment:
+      CALENDAR_ACCOUNT_EMAIL: ${CALENDAR_ACCOUNT_EMAIL:-}
+      BOT_PROFILE_ACCOUNT_EMAIL: ${BOT_PROFILE_ACCOUNT_EMAIL:-}
+      GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-}
+      GOOGLE_CALENDAR_CLIENT_ID: ${GOOGLE_CALENDAR_CLIENT_ID:-}
+      GOOGLE_CALENDAR_CLIENT_SECRET: ${GOOGLE_CALENDAR_CLIENT_SECRET:-}
+      GOOGLE_CALENDAR_REFRESH_TOKEN: ${GOOGLE_CALENDAR_REFRESH_TOKEN:-}
+      MOM_SERVICE_B_URL: http://mom-service-b:3000
+    depends_on:
+      - mom-service-b
+    restart: unless-stopped
+
+volumes:
+  bot-profile:
