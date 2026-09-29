@@ -13,7 +13,7 @@ import {
   type MeetingSlot,
 } from "./meeting.config.js";
 
-async function clickJoin(page: Page): Promise<boolean> {
+async function clickJoin(page: Page): Promise<string | null> {
   const deadline = Date.now() + 30_000;
 
   while (Date.now() < deadline) {
@@ -22,7 +22,10 @@ async function clickJoin(page: Page): Promise<boolean> {
       .or(page.locator('button:has-text("Ask to join"), button:has-text("Join now")'))
       .first();
 
-    if (!(await button.isVisible({ timeout: 3_000 }).catch(() => false))) continue;
+    if (!(await button.isVisible({ timeout: 3_000 }).catch(() => false))) {
+      await page.waitForTimeout(250);
+      continue;
+    }
 
     const disabled = await button
       .evaluate(
@@ -36,10 +39,14 @@ async function clickJoin(page: Page): Promise<boolean> {
       continue;
     }
 
-    if (await button.click().then(() => true).catch(() => false)) return true;
+    const action =
+      (await button.getAttribute("aria-label").catch(() => null)) ||
+      (await button.textContent().catch(() => null)) ||
+      "Join";
+    if (await button.click().then(() => true).catch(() => false)) return action.trim();
   }
 
-  return false;
+  return null;
 }
 
 async function leaveMeeting(page: Page): Promise<void> {
@@ -135,20 +142,31 @@ export default async function joinMeeting(
       )
       .first();
     if (await nameInput.isVisible({ timeout: 4_000 }).catch(() => false)) {
+      logger.warn(
+        `[Meet] ${meetingId} shows a guest-name field; the bot profile appears to be signed out.`
+      );
       await nameInput.fill(process.env.BOT_DISPLAY_NAME || "squirrel");
     }
 
-    if (!(await clickJoin(page))) {
+    const joinAction = await clickJoin(page);
+    if (!joinAction) {
       fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
       const screenshot = path.join(ARTIFACTS_DIR, `join-failure-${meetingId}-${Date.now()}.png`);
       await page.screenshot({ path: screenshot, fullPage: true }).catch(() => undefined);
       throw new Error(`Join button did not become clickable; screenshot: ${screenshot}`);
+    }
+    logger.info(`[Meet] Clicked "${joinAction}" for ${meetingId}.`);
+    if (/ask to join/i.test(joinAction)) {
+      logger.warn(
+        `[Meet] ${meetingId} requires host admission. The bot cannot enter until a host admits it.`
+      );
     }
 
     // "Ask to join" can leave the bot in the waiting room. Start the grace
     // period only once Meet exposes its in-call controls and admission is
     // therefore confirmed.
     await page.getByLabel("Leave call").first().waitFor({ state: "visible", timeout: 0 });
+    logger.info(`[Meet] Admission confirmed for ${meetingId}.`);
 
     const leaveChecksStartAt = Date.now() + LEAVE_GRACE_PERIOD_MS;
     logger.info(
