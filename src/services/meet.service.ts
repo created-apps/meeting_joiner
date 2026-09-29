@@ -70,6 +70,10 @@ export default async function joinMeeting(
   const args = [
     "--lang=en-US",
     "--disable-blink-features=AutomationControlled",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--no-default-browser-check",
+    "--no-first-run",
     "--window-position=0,0",
     `--window-size=${SCREEN_WIDTH},${SCREEN_HEIGHT}`,
     "--start-maximized",
@@ -86,6 +90,7 @@ export default async function joinMeeting(
     context = await chromium.launchPersistentContext(slot.profileDir, {
       ...chromeLaunch,
       headless: false,
+      timeout: 60_000,
       locale: "en-US",
       args,
       ignoreDefaultArgs: ["--enable-automation"],
@@ -95,6 +100,7 @@ export default async function joinMeeting(
           ? { ...process.env, DISPLAY: slot.display }
           : { ...process.env },
     });
+    logger.info(`[Meet] Chrome started for ${meetingId} on ${slot.display}.`);
 
     await context.addInitScript(() => {
       Object.defineProperty(navigator, "webdriver", { get: () => undefined });
@@ -103,7 +109,9 @@ export default async function joinMeeting(
     });
 
     page = context.pages()[0] ?? (await context.newPage());
-    await page.goto(meetingUrl, { waitUntil: "domcontentloaded" });
+    logger.info(`[Meet] Navigating ${meetingId} to Google Meet.`);
+    await page.goto(meetingUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    logger.info(`[Meet] Google Meet loaded for ${meetingId}: ${page.url()}`);
 
     if (page.url().includes("accounts.google.com")) {
       throw new Error('Bot profile is signed out; run "npm run login" before starting the service.');
