@@ -37,32 +37,25 @@ Worker variables are documented in `.env.example`. In particular:
 - `BOT_PROFILE_URL` points to the packed profile seed.
 - `BOT_PROFILE_FORCE_SEED=true` refreshes the seed at container startup.
 
-### Portable bot authentication
+### Cloudflare R2 profile seed
 
-Chrome profile cookies generated on macOS cannot be reused directly in the
-Linux Railway container. Generate a portable Playwright authentication state
-instead:
+Package a known-working Linux Chrome profile with `npm run pack-profile`, then
+upload `bot-profile.b64` to a private Cloudflare R2 bucket. Generate a temporary
+signed GET URL for that object and configure Railway with:
 
-```bash
-npm run login
-npm run pack-profile
+```env
+BOT_PROFILE_URL=<signed R2 GET URL>
+BOT_PROFILE_FORCE_SEED=true
 ```
 
-In the Chrome window, sign in to the bot Google account completely, then press
-Enter in the terminal. `npm run login` writes
-`bot-profile-basic/auth-state.json`; `npm run pack-profile` packages only that
-portable state into `bot-profile.b64`.
+Deploy once and wait for `Bot profile seeded successfully` in the service logs.
+Then set `BOT_PROFILE_FORCE_SEED=false`; the extracted profile remains on the
+Railway volume mounted at `/app/bot-profile-basic`. The signed URL is a bearer
+credential and should be removed from Railway after seeding.
 
-To reseed Railway, put the contents of `bot-profile.b64` in
-`BOT_PROFILE_B64`, set `BOT_PROFILE_FORCE_SEED=true`, and deploy once. After the
-logs report `Bot profile seeded successfully`, set
-`BOT_PROFILE_FORCE_SEED=false` and remove `BOT_PROFILE_B64`; the state remains
-on the attached `/app/bot-profile-basic` volume. If Railway rejects the variable
-because of its size, use `BOT_PROFILE_URL` with a temporary private object URL
-instead.
-
-Treat both `auth-state.json` and `bot-profile.b64` as passwords. They are
-ignored by Git and must never be committed.
+R2 only transports the archive. A Chrome profile created on macOS or Windows
+may remain signed out in Railway because Chrome cookies are encrypted by the
+source operating system; use an existing profile known to work on Linux.
 
 ## Calendar cron
 

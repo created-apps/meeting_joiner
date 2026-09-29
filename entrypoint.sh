@@ -1,15 +1,14 @@
 #!/bin/bash
 
 # ---------------------------------------------------------------------------
-# Seed the bot's portable Playwright authentication (one-time, on first boot).
+# Seed the bot's authenticated Chrome profile (one-time, on first boot).
 #
-# The bot must join Google Meet as a signed-in account. Interactive login runs
-# locally and exports a portable auth-state.json. It is shipped as a
-# base64-encoded gzipped tarball and extracted into `bot-profile-basic/`.
+# The bot must join Google Meet as a signed-in account. We can't sign in inside
+# the container, so a profile archive is fetched from private Cloudflare R2 as
+# a base64-encoded gzipped tarball of `bot-profile-basic/`.
 #
-# Provide it either as:
-#   - a seed file whose path is in BOT_PROFILE_SEED_FILE, or
-#   - an env var BOT_PROFILE_B64 (base64 contents inline).
+# Prefer BOT_PROFILE_URL with a temporary signed R2 GET URL. A local seed file
+# or BOT_PROFILE_B64 remains available as a fallback.
 #
 # Seeding runs only when the profile volume has not been seeded yet, so a
 # session that Google refreshes on the persistent volume is never clobbered.
