@@ -2,6 +2,8 @@ import * as path from "node:path";
 
 export const ROOT_DIR = process.cwd();
 export const BOT_PROFILE_DIR = path.join(ROOT_DIR, "bot-profile-basic");
+export const BOT_AUTH_STATE_FILENAME = "auth-state.json";
+export const BOT_AUTH_STATE_FILE = path.join(BOT_PROFILE_DIR, BOT_AUTH_STATE_FILENAME);
 export const WORKER_PROFILES_DIR = path.join(ROOT_DIR, "profiles");
 export const ARTIFACTS_DIR = path.join(ROOT_DIR, "artifacts");
 

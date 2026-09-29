@@ -37,6 +37,33 @@ Worker variables are documented in `.env.example`. In particular:
 - `BOT_PROFILE_URL` points to the packed profile seed.
 - `BOT_PROFILE_FORCE_SEED=true` refreshes the seed at container startup.
 
+### Portable bot authentication
+
+Chrome profile cookies generated on macOS cannot be reused directly in the
+Linux Railway container. Generate a portable Playwright authentication state
+instead:
+
+```bash
+npm run login
+npm run pack-profile
+```
+
+In the Chrome window, sign in to the bot Google account completely, then press
+Enter in the terminal. `npm run login` writes
+`bot-profile-basic/auth-state.json`; `npm run pack-profile` packages only that
+portable state into `bot-profile.b64`.
+
+To reseed Railway, put the contents of `bot-profile.b64` in
+`BOT_PROFILE_B64`, set `BOT_PROFILE_FORCE_SEED=true`, and deploy once. After the
+logs report `Bot profile seeded successfully`, set
+`BOT_PROFILE_FORCE_SEED=false` and remove `BOT_PROFILE_B64`; the state remains
+on the attached `/app/bot-profile-basic` volume. If Railway rejects the variable
+because of its size, use `BOT_PROFILE_URL` with a temporary private object URL
+instead.
+
+Treat both `auth-state.json` and `bot-profile.b64` as passwords. They are
+ignored by Git and must never be committed.
+
 ## Calendar cron
 
 The separate service is documented in `cron-service/README.md`. It uses the

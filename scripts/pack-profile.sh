@@ -1,20 +1,14 @@
 #!/usr/bin/env bash
 #
-# Packs the bot's authenticated Chrome profile into a base64 gzipped tarball
-# suitable for pasting into a Northflank secret file.
+# Packs the bot's portable Playwright authentication state into a base64
+# gzipped tarball suitable for seeding the Railway profile volume.
 #
 # Usage:
 #   npm run login            # sign the bot in first (populates bot-profile-basic/)
 #   npm run pack-profile     # produces bot-profile.b64
 #
-# Then in Northflank: create a secret FILE, paste the contents of
-# bot-profile.b64, mount it into the service, and set BOT_PROFILE_SEED_FILE to
-# the mount path. (Or paste into an env var BOT_PROFILE_B64 if small enough.)
-#
-# IMPORTANT: Chrome encrypts cookies with a per-OS key, so a profile created on
-# macOS/Windows may not decrypt inside the Linux container. Generate the profile
-# on Linux (same environment as the deployment) if the seeded bot shows up
-# logged out. See the README notes.
+# The exported auth-state.json contains decrypted cookies and browser storage,
+# so it can be generated on macOS/Windows and imported on Railway Linux.
 set -euo pipefail
 
 PROFILE_DIR="${1:-bot-profile-basic}"
@@ -25,25 +19,14 @@ if [ ! -d "$PROFILE_DIR" ]; then
   exit 1
 fi
 
-# Exclude bulky, non-auth caches so the secret stays small.
-tar czf - -C "$PROFILE_DIR" \
-  --exclude='./Default/Cache' \
-  --exclude='./Default/Code Cache' \
-  --exclude='./Default/GPUCache' \
-  --exclude='./Default/DawnCache' \
-  --exclude='./Default/DawnGraphiteCache' \
-  --exclude='./Default/DawnWebGPUCache' \
-  --exclude='./Default/GrShaderCache' \
-  --exclude='./Default/Service Worker/CacheStorage' \
-  --exclude='./Default/Service Worker/ScriptCache' \
-  --exclude='./GrShaderCache' \
-  --exclude='./ShaderCache' \
-  --exclude='./component_crx_cache' \
-  . | base64 > "$OUT"
+AUTH_STATE_FILE="$PROFILE_DIR/auth-state.json"
+if [ ! -f "$AUTH_STATE_FILE" ]; then
+  echo "Portable auth state '$AUTH_STATE_FILE' not found. Run 'npm run login' first." >&2
+  exit 1
+fi
+
+tar czf - -C "$PROFILE_DIR" auth-state.json | base64 | tr -d '\n' > "$OUT"
 
 BYTES=$(wc -c < "$OUT" | tr -d ' ')
 echo "Wrote $OUT ($BYTES bytes)."
-echo "Paste its contents into a Northflank secret file and point BOT_PROFILE_SEED_FILE at the mount path."
-if [ "$BYTES" -gt 512000 ]; then
-  echo "NOTE: >512KB — use a Northflank secret FILE (not an env var) for this."
-fi
+echo "Upload this seed through your configured Railway volume bootstrap method."

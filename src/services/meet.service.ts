@@ -1,10 +1,11 @@
-import { chromium, type BrowserContext, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import getParticipants from "./participants.service.js";
 import logger from "./logger.service.js";
 import {
   ARTIFACTS_DIR,
+  BOT_AUTH_STATE_FILENAME,
   LEAVE_GRACE_PERIOD_MS,
   MIN_PARTICIPANTS,
   PARTICIPANTS_REFRESH_TIME,
@@ -64,6 +65,13 @@ async function closeContext(context: BrowserContext | null): Promise<void> {
   });
 }
 
+async function closeBrowser(browser: Browser | null): Promise<void> {
+  if (!browser) return;
+  await browser.close().catch((error: unknown) => {
+    logger.warn(`[Meet] Browser cleanup failed: ${(error as Error).message}`);
+  });
+}
+
 /** Join one Google Meet, wait through the grace period, then leave below two. */
 export default async function joinMeeting(
   meetingUrl: string,
@@ -89,25 +97,39 @@ export default async function joinMeeting(
     args.push("--ozone-platform=x11");
   }
 
+  let browser: Browser | null = null;
   let context: BrowserContext | null = null;
   let page: Page | null = null;
 
   try {
+    const authStatePath = path.join(slot.profileDir, BOT_AUTH_STATE_FILENAME);
+    if (!fs.existsSync(authStatePath)) {
+      throw new Error(
+        `Portable bot authentication is missing at ${authStatePath}; run "npm run login", pack the profile, and reseed the Railway volume.`
+      );
+    }
+
     logger.info(`[Meet] Opening ${meetingId} on worker slot ${slot.id}.`);
-    context = await chromium.launchPersistentContext(slot.profileDir, {
+    browser = await chromium.launch({
       ...chromeLaunch,
       headless: false,
       timeout: 60_000,
-      locale: "en-US",
       args,
       ignoreDefaultArgs: ["--enable-automation"],
-      permissions: ["microphone", "camera"],
       env:
         process.platform === "linux"
           ? { ...process.env, DISPLAY: slot.display }
           : { ...process.env },
     });
     logger.info(`[Meet] Chrome started for ${meetingId} on ${slot.display}.`);
+
+    context = await browser.newContext({
+      storageState: authStatePath,
+      locale: "en-US",
+      permissions: ["microphone", "camera"],
+      viewport: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT },
+    });
+    logger.info(`[Meet] Imported portable bot authentication for ${meetingId}.`);
 
     await context.addInitScript(() => {
       Object.defineProperty(navigator, "webdriver", { get: () => undefined });
@@ -142,10 +164,9 @@ export default async function joinMeeting(
       )
       .first();
     if (await nameInput.isVisible({ timeout: 4_000 }).catch(() => false)) {
-      logger.warn(
-        `[Meet] ${meetingId} shows a guest-name field; the bot profile appears to be signed out.`
+      throw new Error(
+        `Google rejected the portable bot authentication for ${meetingId}; regenerate auth-state.json with "npm run login" and reseed the Railway volume.`
       );
-      await nameInput.fill(process.env.BOT_DISPLAY_NAME || "squirrel");
     }
 
     const joinAction = await clickJoin(page);
@@ -202,5 +223,6 @@ export default async function joinMeeting(
   } finally {
     if (page && !page.isClosed()) await leaveMeeting(page).catch(() => undefined);
     await closeContext(context);
+    await closeBrowser(browser);
   }
 }
