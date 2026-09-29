@@ -11,6 +11,7 @@
 # Optional:
 #   MAX_QUEUED_MEETINGS        = 10
 #   PARTICIPANTS_REFRESH_TIME  = 5000
+#   LEAVE_GRACE_PERIOD_MS      = 2700000  # 45 minutes
 #   DISPLAY_BASE               = 101
 
 [build]

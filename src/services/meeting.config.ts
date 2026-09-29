@@ -25,6 +25,11 @@ export const PARTICIPANTS_REFRESH_TIME = Math.max(
   Number(process.env.PARTICIPANTS_REFRESH_TIME || 5_000)
 );
 
+export const LEAVE_GRACE_PERIOD_MS = Math.max(
+  0,
+  Number(process.env.LEAVE_GRACE_PERIOD_MS || 45 * 60_000)
+);
+
 export const MIN_PARTICIPANTS = 2;
 
 export interface MeetingSlot {

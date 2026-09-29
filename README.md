@@ -24,14 +24,16 @@ Each concurrent slot gets a unique Xvfb display and an ephemeral copy of the
 single seeded Chrome profile. Chrome never opens the seed profile itself, so
 workers do not share profile locks. Overflow requests are queued.
 
-The bot waits until at least two participants have been observed and leaves
-when the count later falls below two. `GET /api/meet/status` reports active and
-queued meetings; `GET /health` is the deployment health check.
+The bot does not apply participant-based leaving during the first 45 minutes
+after admission to the call is confirmed. Once that grace period ends, it leaves when the
+participant count is below two. `GET /api/meet/status` reports active and queued
+meetings; `GET /health` is the deployment health check.
 
 Worker variables are documented in `.env.example`. In particular:
 
 - `MAX_CONCURRENT_MEETINGS=1` allows one active meeting.
 - Set `MAX_CONCURRENT_MEETINGS` above `1` to join simultaneous meetings.
+- `LEAVE_GRACE_PERIOD_MS=2700000` starts participant-based leaving after 45 minutes.
 - `BOT_PROFILE_URL` points to the packed profile seed.
 - `BOT_PROFILE_FORCE_SEED=true` refreshes the seed at container startup.
 

@@ -5,6 +5,7 @@ import getParticipants from "./participants.service.js";
 import logger from "./logger.service.js";
 import {
   ARTIFACTS_DIR,
+  LEAVE_GRACE_PERIOD_MS,
   MIN_PARTICIPANTS,
   PARTICIPANTS_REFRESH_TIME,
   SCREEN_HEIGHT,
@@ -56,7 +57,7 @@ async function closeContext(context: BrowserContext | null): Promise<void> {
   });
 }
 
-/** Join one Google Meet, observe attendance, and leave once it drops below two. */
+/** Join one Google Meet, wait through the grace period, then leave below two. */
 export default async function joinMeeting(
   meetingUrl: string,
   meetingId: string,
@@ -136,24 +137,41 @@ export default async function joinMeeting(
       throw new Error(`Join button did not become clickable; screenshot: ${screenshot}`);
     }
 
-    logger.info(`[Meet] Join requested for ${meetingId}; waiting for ${MIN_PARTICIPANTS} participants.`);
-    let quorumObserved = false;
+    // "Ask to join" can leave the bot in the waiting room. Start the grace
+    // period only once Meet exposes its in-call controls and admission is
+    // therefore confirmed.
+    await page.getByLabel("Leave call").first().waitFor({ state: "visible", timeout: 0 });
 
-    while (true) {
-      await page.waitForTimeout(PARTICIPANTS_REFRESH_TIME);
+    const leaveChecksStartAt = Date.now() + LEAVE_GRACE_PERIOD_MS;
+    logger.info(
+      `[Meet] Joined ${meetingId}; participant-based leaving starts in ${Math.ceil(
+        LEAVE_GRACE_PERIOD_MS / 60_000
+      )} minute(s).`
+    );
+
+    while (!page.isClosed() && Date.now() < leaveChecksStartAt) {
+      const remaining = leaveChecksStartAt - Date.now();
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(PARTICIPANTS_REFRESH_TIME, remaining))
+      );
+    }
+
+    if (!page.isClosed()) {
+      logger.info(`[Meet] ${meetingId} grace period ended; participant-based leaving is active.`);
+    }
+
+    while (!page.isClosed()) {
       const participants = await getParticipants(page);
       logger.info(`[Meet] ${meetingId} participant count: ${participants.length}`);
 
-      if (participants.length >= MIN_PARTICIPANTS) {
-        quorumObserved = true;
-      } else if (quorumObserved) {
+      if (participants.length < MIN_PARTICIPANTS) {
         logger.info(
-          `[Meet] ${meetingId} dropped below ${MIN_PARTICIPANTS} participants; leaving.`
+          `[Meet] ${meetingId} has fewer than ${MIN_PARTICIPANTS} participants after the grace period; leaving.`
         );
         break;
       }
 
-      if (page.isClosed()) break;
+      await page.waitForTimeout(PARTICIPANTS_REFRESH_TIME);
     }
   } finally {
     if (page && !page.isClosed()) await leaveMeeting(page).catch(() => undefined);
