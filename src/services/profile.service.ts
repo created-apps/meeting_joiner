@@ -3,6 +3,7 @@ import * as path from "node:path";
 import logger from "./logger.service.js";
 
 const CHROME_LOCK_FILES = ["SingletonLock", "SingletonSocket", "SingletonCookie"];
+const VOLUME_SYSTEM_ENTRIES = new Set(["lost+found"]);
 
 /**
  * Make an isolated working copy of the seeded bot profile. Chrome locks a
@@ -17,7 +18,18 @@ export async function prepareWorkerProfile(seedDir: string, workerDir: string): 
   }
 
   logger.info(`[Profile] Replicating bot profile into ${workerDir}`);
-  await fs.promises.cp(seedDir, workerDir, { recursive: true });
+  const seedRoot = path.resolve(seedDir);
+  await fs.promises.cp(seedRoot, workerDir, {
+    recursive: true,
+    // Railway volumes may contain a root-owned ext filesystem recovery
+    // directory. It is not part of Chrome's profile and cannot be read by the
+    // non-root browser user.
+    filter: (source) => {
+      const relativePath = path.relative(seedRoot, path.resolve(source));
+      const topLevelEntry = relativePath.split(path.sep)[0];
+      return topLevelEntry === undefined || !VOLUME_SYSTEM_ENTRIES.has(topLevelEntry);
+    },
+  });
   for (const file of CHROME_LOCK_FILES) {
     await fs.promises.rm(path.join(workerDir, file), { force: true }).catch(() => undefined);
   }
