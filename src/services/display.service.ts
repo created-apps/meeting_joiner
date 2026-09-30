@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import logger from "./logger.service.js";
 import { SCREEN_DEPTH, SCREEN_HEIGHT, SCREEN_WIDTH } from "./meeting.config.js";
@@ -6,6 +6,7 @@ import { SCREEN_DEPTH, SCREEN_HEIGHT, SCREEN_WIDTH } from "./meeting.config.js";
 /** Owns the virtual display used by the non-headless Meet browser. */
 export class XvfbDisplay {
   private proc: ChildProcess | null = null;
+  private stopping = false;
   private readonly displayNum: string;
 
   constructor(private readonly display: string) {
@@ -36,6 +37,7 @@ export class XvfbDisplay {
     ];
 
     logger.info(`[Display] Starting Xvfb on ${this.display}`);
+    this.stopping = false;
     this.proc = spawn("Xvfb", args, { stdio: ["ignore", "ignore", "pipe"] });
 
     let stderr = "";
@@ -43,8 +45,13 @@ export class XvfbDisplay {
     this.proc.stderr?.on("data", (chunk) => {
       stderr += chunk.toString();
     });
-    this.proc.once("exit", () => {
+    this.proc.once("exit", (code, signal) => {
       exited = true;
+      if (!this.stopping) {
+        logger.error(
+          `[Display] Xvfb on ${this.display} exited unexpectedly (code=${code}, signal=${signal}): ${stderr.trim()}`
+        );
+      }
     });
 
     const deadline = Date.now() + timeoutMs;
@@ -52,7 +59,17 @@ export class XvfbDisplay {
       if (exited) {
         throw new Error(`Xvfb failed to start on ${this.display}: ${stderr.trim()}`);
       }
-      if (fs.existsSync(this.socketFile)) return;
+      if (fs.existsSync(this.socketFile)) {
+        const probe = spawnSync("xdpyinfo", ["-display", this.display], {
+          env: { ...process.env, DISPLAY: this.display },
+          stdio: "ignore",
+          timeout: 1_000,
+        });
+        if (probe.status === 0) {
+          logger.info(`[Display] Xvfb on ${this.display} is ready.`);
+          return;
+        }
+      }
       await new Promise((resolve) => setTimeout(resolve, 150));
     }
 
@@ -61,10 +78,13 @@ export class XvfbDisplay {
   }
 
   async stop(): Promise<void> {
-    if (this.proc && !this.proc.killed) {
+    this.stopping = true;
+    if (this.proc && this.proc.exitCode === null && this.proc.signalCode === null) {
       this.proc.kill("SIGTERM");
       await new Promise((resolve) => setTimeout(resolve, 500));
-      if (!this.proc.killed) this.proc.kill("SIGKILL");
+      if (this.proc.exitCode === null && this.proc.signalCode === null) {
+        this.proc.kill("SIGKILL");
+      }
     }
     this.proc = null;
 

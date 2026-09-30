@@ -86,14 +86,16 @@ export default async function joinMeeting(
     "--start-maximized",
   ];
   if (process.platform !== "darwin" && process.platform !== "win32") {
-    args.push("--ozone-platform=x11");
+    args.push("--ozone-platform=x11", `--display=${slot.display}`);
   }
 
   let context: BrowserContext | null = null;
   let page: Page | null = null;
 
   try {
-    logger.info(`[Meet] Opening ${meetingId} on worker slot ${slot.id}.`);
+    logger.info(
+      `[Meet] Opening ${meetingId} on worker slot ${slot.id} with DISPLAY=${slot.display}.`
+    );
     context = await chromium.launchPersistentContext(slot.profileDir, {
       ...chromeLaunch,
       headless: false,

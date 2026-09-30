@@ -36,10 +36,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         google-chrome-stable \
         xvfb \
+        x11-utils \
         dbus \
         dbus-x11 \
         fonts-liberation \
         curl \
+    && dbus-uuidgen > /etc/machine-id \
     && apt-get purge -y wget gnupg \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
