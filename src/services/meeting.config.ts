@@ -1,7 +1,8 @@
 import * as path from "node:path";
 
 export const ROOT_DIR = process.cwd();
-export const BOT_PROFILE_DIR = path.join(ROOT_DIR, "bot-profile-basic");
+export const BOT_PROFILE_VOLUME_DIR = path.join(ROOT_DIR, "bot-profile-basic");
+export const BOT_PROFILE_DIR = path.join(BOT_PROFILE_VOLUME_DIR, "current");
 export const WORKER_PROFILES_DIR = path.join(ROOT_DIR, "profiles");
 export const ARTIFACTS_DIR = path.join(ROOT_DIR, "artifacts");
 

@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "test": "npm run build && node --test dist/services/session-manager.test.js",
+    "test": "npm run build && node --test dist/services/*.test.js",
     "login": "tsx src/login.ts",
     "pack-profile": "bash scripts/pack-profile.sh"
   },

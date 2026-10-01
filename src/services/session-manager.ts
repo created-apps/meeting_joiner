@@ -10,7 +10,11 @@ import {
   WORKER_PROFILES_DIR,
   type MeetingSlot,
 } from "./meeting.config.js";
-import { prepareWorkerProfile, removeWorkerProfile } from "./profile.service.js";
+import {
+  persistWorkerProfile,
+  prepareWorkerProfile,
+  removeWorkerProfile,
+} from "./profile.service.js";
 
 export type JoinResult =
   | { status: "started"; slotId: number; active: number; capacity: number }
@@ -35,15 +39,24 @@ async function runMeetingSession(
   meetLink: string
 ): Promise<void> {
   const display = process.platform === "linux" ? new XvfbDisplay(slot.display) : null;
+  let meetingCompleted = false;
 
   try {
     await prepareWorkerProfile(BOT_PROFILE_DIR, slot.profileDir);
     await display?.start();
     await joinMeeting(meetLink, meetingId, slot);
+    meetingCompleted = true;
   } finally {
     await display?.stop().catch((error: unknown) => {
       logger.error(`[Session] Display cleanup failed for slot ${slot.id}: ${(error as Error).message}`);
     });
+    if (meetingCompleted) {
+      await persistWorkerProfile(BOT_PROFILE_DIR, slot.profileDir).catch((error: unknown) => {
+        logger.error(
+          `[Session] Profile persistence failed for slot ${slot.id}: ${(error as Error).message}`
+        );
+      });
+    }
     await removeWorkerProfile(slot.profileDir).catch((error: unknown) => {
       logger.error(`[Session] Profile cleanup failed for slot ${slot.id}: ${(error as Error).message}`);
     });

@@ -39,6 +39,7 @@ RUN apt-get update \
         x11-utils \
         dbus \
         dbus-x11 \
+        gosu \
         fonts-liberation \
         curl \
     && dbus-uuidgen > /etc/machine-id \
@@ -57,7 +58,7 @@ COPY --from=builder --chown=pwuser:pwuser /app/dist ./dist
 COPY --chown=pwuser:pwuser package*.json entrypoint.sh ./
 
 RUN chmod +x entrypoint.sh \
-    && mkdir -p logs artifacts bot-profile-basic profiles \
+    && mkdir -p logs artifacts bot-profile-basic/current profiles \
     && chown pwuser:pwuser logs artifacts bot-profile-basic profiles
 
 # The system apt repo for google-chrome-stable fails on Railway's build infra.
@@ -65,7 +66,9 @@ RUN chmod +x entrypoint.sh \
 # and installs all required system libraries via --with-deps.
 RUN npx playwright install chrome --with-deps
 
-USER pwuser
+# Railway volumes are initially root-owned. The entrypoint initializes the
+# mount permissions, then drops permanently to pwuser before Node or Chrome run.
+USER root
 
 EXPOSE 3000
 

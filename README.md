@@ -22,7 +22,10 @@ Content-Type: application/json
 
 Each concurrent slot gets a unique Xvfb display and an ephemeral copy of the
 single seeded Chrome profile. Chrome never opens the seed profile itself, so
-workers do not share profile locks. Overflow requests are queued.
+workers do not share profile locks. Overflow requests are queued. After a
+successful meeting ends, its closed worker profile is staged and atomically
+promoted to the canonical profile on the attached volume. Profile reads and
+write-backs are serialized so concurrent workers never observe a partial copy.
 
 The bot does not apply participant-based leaving during the first 45 minutes
 after admission to the call is confirmed. Once that grace period ends, it leaves when the
@@ -37,11 +40,11 @@ Worker variables are documented in `.env.example`. In particular:
 - `BOT_PROFILE_URL` points to the packed profile seed.
 - `BOT_PROFILE_FORCE_SEED=true` refreshes the seed at container startup.
 
-### Cloudflare R2 profile seed
+### Private object-storage profile seed
 
 Package a known-working Linux Chrome profile with `npm run pack-profile`, then
-upload `bot-profile.b64` to a private Cloudflare R2 bucket. Generate a temporary
-signed GET URL for that object and configure Railway with:
+upload `bot-profile.b64` to a private Supabase Storage or Cloudflare R2 bucket.
+Generate a temporary signed GET URL for that object and configure Railway with:
 
 ```env
 BOT_PROFILE_URL=<signed R2 GET URL>
@@ -53,9 +56,14 @@ Then set `BOT_PROFILE_FORCE_SEED=false`; the extracted profile remains on the
 Railway volume mounted at `/app/bot-profile-basic`. The signed URL is a bearer
 credential and should be removed from Railway after seeding.
 
-R2 only transports the archive. A Chrome profile created on macOS or Windows
-may remain signed out in Railway because Chrome cookies are encrypted by the
-source operating system; use an existing profile known to work on Linux.
+The volume is required for refreshed Google cookies to survive deployments.
+Keep Railway at one service replica; concurrency is handled by the worker pool
+inside that replica, while profile write-backs use an in-process lock.
+
+Object storage only transports the archive. A Chrome profile created on macOS
+or Windows may remain signed out in Railway because Chrome cookies are
+encrypted by the source operating system; use an existing profile known to work
+on Linux.
 
 ## Calendar cron
 
